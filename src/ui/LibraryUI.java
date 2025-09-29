@@ -4,6 +4,7 @@ import model.Book;
 import model.Library;
 import model.User;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -63,13 +64,31 @@ public class LibraryUI {
         String title = scanner.nextLine();
         System.out.print("Автор: ");
         String author = scanner.nextLine();
-        System.out.print("Год: ");
-        int year = Integer.parseInt(scanner.nextLine());
-        System.out.print("Количество экземпляров: ");
-        int totalCopies = Integer.parseInt(scanner.nextLine());
+        int year;
+        while (true) {
+            System.out.print("Год: ");
+            String yearStr = scanner.nextLine().trim();
+            try {
+                year = Integer.parseInt(yearStr);
+                break;
+            } catch (NumberFormatException e) {
+                System.out.println("Ошибка: введите корректный год.");
+            }
+        }
+        int totalCopies;
+        while (true) {
+            System.out.print("Количество экземпляров: ");
+            String totalCopiesStr = scanner.nextLine().trim();
+            try {
+                totalCopies = Integer.parseInt(totalCopiesStr);
+                break;
+            } catch (NumberFormatException e) {
+                System.out.println("Ошибка: введите корректное количество экземпляров.");
+            }
+        }
         Book book = new Book(title, author, year, totalCopies);
-        library.addBook(book);
-        System.out.println(book);
+        int bookId = library.addBook(book);
+        System.out.println(library.books.get(bookId));
         System.out.println("Книга добавлена!");
         askReturn();
     }

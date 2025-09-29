@@ -11,7 +11,7 @@ public class Book {
     private final String title;
     private final String author;
     private final int year;
-    private final int totalCopies;
+    private int totalCopies;
     private int availableCopies;
     private static int counter = 0;
 
@@ -74,6 +74,19 @@ public class Book {
 
     public int getTotalCopies() {
         return this.totalCopies;
+    }
+
+    public void setTotalCopies(int totalCopies) {
+        if (totalCopies < 0) {
+            throw new BookValidationException("Количество экземпляров книги не может быть отрицательным.");
+        }
+        if (totalCopies < this.totalCopies) {
+            throw new BookValidationException("Нельзя уменьшить количество экземпляров книги.");
+        }
+
+        int difference = totalCopies - this.totalCopies;
+        this.totalCopies = totalCopies;
+        this.availableCopies += difference;
     }
 
     public int getAvailableCopies() {

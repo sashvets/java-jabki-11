@@ -1,6 +1,7 @@
 package model;
 
 import exceptions.BookAlreadyExistsException;
+import exceptions.BookValidationException;
 import exceptions.UserAlreadyExistsException;
 
 import java.io.BufferedReader;
@@ -57,15 +58,26 @@ public class Library {
         }
     }
 
-    public void addBook(Book book) {
-        boolean duplicate = books.values().stream()
-                .anyMatch(b -> b.equals(book));
-        if (duplicate) {
-            throw new BookAlreadyExistsException(book);
+    public int addBook(Book book) {
+        for (Book existBook : books.values()) {
+            if (existBook.equals(book)) {
+                if (book.getTotalCopies() <= 0) {
+                    throw new BookValidationException("Количество добавляемых книг не может быть меньше или равно нулю.");
+                }
+                existBook.setTotalCopies(existBook.getTotalCopies() + book.getTotalCopies());
+                try {
+                    saveBooks();
+                } catch (IOException e) {
+                    throw new IllegalArgumentException(e);
+                }
+                return existBook.getId();
+            }
         }
-        this.books.put(book.getId(), book);
+
+        books.put(book.getId(), book);
         try {
-            this.saveBooks();
+            saveBooks();
+            return book.getId();
         } catch (IOException e) {
             throw new IllegalArgumentException(e);
         }
