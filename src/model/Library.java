@@ -1,8 +1,10 @@
 package model;
 
-import exceptions.BookAlreadyExistsException;
+import exceptions.BookFromUserNotFoundException;
+import exceptions.BookNotFoundException;
 import exceptions.BookValidationException;
 import exceptions.UserAlreadyExistsException;
+import exceptions.UserNotFoundException;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -14,48 +16,52 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Library {
-    public Map<Integer, Book> books;
-    public Map<Integer, User> users;
+    private final Map<Integer, Book> books;
+    private final Map<Integer, User> users;
 
     public Map<Integer, Map<Integer, Integer>> userBooks;
-    private final String booksFile;
-    private final String usersFile;
-    private final String borrowsFile;
+    private final String booksFile = "src/storage/books";
+    private final String usersFile = "src/storage/users";
+    private final String borrowsFile = "src/storage/borrows";
 
-    public Library(String bookFile, String userFile, String borrowsFile) {
-        this.booksFile = bookFile;
-        this.usersFile = userFile;
-        this.borrowsFile = borrowsFile;
+    public Library() {
         this.books = new HashMap<Integer, Book>();
         this.users = new HashMap<Integer, User>();
         this.userBooks = new HashMap<>();
-        if (this.booksFile != null) {
-            if (!this.booksFile.isBlank()) {
-                try {
-                    this.loadBooks();
-                } catch (IOException e) {
-                    throw new IllegalArgumentException(e);
-                }
-            }
+    }
+
+    public void initLibrary() {
+        try {
+            this.loadBooks();
+        } catch (IOException e) {
+            throw new IllegalArgumentException(e);
         }
-        if (this.usersFile != null) {
-            if (!this.usersFile.isBlank()) {
-                try {
-                    this.loadUsers();
-                } catch (IOException e) {
-                    throw new IllegalArgumentException(e);
-                }
-            }
+        try {
+            this.loadUsers();
+        } catch (IOException e) {
+            throw new IllegalArgumentException(e);
         }
-        if (this.borrowsFile != null) {
-            if (!this.borrowsFile.isBlank()) {
-                try {
-                    this.loadBorrows();
-                } catch (IOException e) {
-                    throw new IllegalArgumentException(e);
-                }
-            }
+        try {
+            this.loadBorrows();
+        } catch (IOException e) {
+            throw new IllegalArgumentException(e);
         }
+    }
+
+    public Map<Integer, Book> getBooks() {
+        return this.books;
+    }
+
+    public Book getBook(int id) {
+        return this.books.get(id);
+    }
+
+    public Map<Integer, User> getUsers() {
+        return this.users;
+    }
+
+    public User getUser(int id) {
+        return this.users.get(id);
     }
 
     public int addBook(Book book) {
@@ -84,8 +90,7 @@ public class Library {
     }
 
     public void addUser(User user) {
-        boolean duplicate = users.values().stream()
-                .anyMatch(b -> b.equals(user));
+        boolean duplicate = users.values().contains(user);
         if (duplicate) {
             throw new UserAlreadyExistsException(user);
         }
@@ -151,10 +156,10 @@ public class Library {
         Book book = books.get(bookId);
 
         if (user == null) {
-            throw new IllegalArgumentException("Читатель с id=" + userId + " не найден.");
+            throw new UserNotFoundException("Читатель с id=" + userId + " не найден.");
         }
         if (book == null) {
-            throw new IllegalArgumentException("Книга с id=" + bookId + " не найдена.");
+            throw new BookNotFoundException("Книга с id=" + bookId + " не найдена.");
         }
 
         book.giveBook();
@@ -174,7 +179,7 @@ public class Library {
     public void returnBook(int userId, int bookId) {
         Map<Integer, Integer> booksOfUser = this.userBooks.get(userId);
         if (booksOfUser == null || !booksOfUser.containsKey(bookId)) {
-            throw new IllegalArgumentException("У читателя нет книги с id=" + bookId);
+            throw new BookFromUserNotFoundException("У читателя нет книги с id=" + bookId);
         }
 
         int count = booksOfUser.get(bookId);

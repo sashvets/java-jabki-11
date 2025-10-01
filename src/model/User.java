@@ -1,17 +1,18 @@
 package model;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class User {
     private final int id;
     private final String name;
     private final String email;
-    private static int counter = 0;
+    private static final AtomicInteger counter = new AtomicInteger(0);
 
     public User(int id, String name, String email) {
         this.id = id;
-        if (counter < id) {
-            counter = id;
+        if (this.id > counter.get()) {
+            counter.set(this.id);
         }
         this.name = name;
         this.email = email;
@@ -34,8 +35,7 @@ public class User {
     }
 
     static int nextId() {
-        counter++;
-        return counter;
+        return counter.incrementAndGet();
     }
 
     @Override

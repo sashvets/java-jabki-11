@@ -5,6 +5,7 @@ import exceptions.NoBooksAvailableException;
 
 import java.time.Year;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Book {
     private final int id;
@@ -13,7 +14,7 @@ public class Book {
     private final int year;
     private int totalCopies;
     private int availableCopies;
-    private static int counter = 0;
+    private static final AtomicInteger counter = new AtomicInteger(0);
 
     public Book(int id, String title, String author, int year, int totalCopies, int availableCopies) {
         if (id <= 0) {
@@ -38,8 +39,8 @@ public class Book {
             throw new BookValidationException("Количество доступных экземпляров книги не может превышать имеющиеся.");
         }
         this.id = id;
-        if (counter < id) {
-            counter = id;
+        if (this.id > counter.get()) {
+            counter.set(this.id);
         }
         this.title = title;
         this.author = author;
@@ -110,8 +111,7 @@ public class Book {
     }
 
     static int nextId() {
-        counter++;
-        return counter;
+        return counter.incrementAndGet();
     }
 
     @Override

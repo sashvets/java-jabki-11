@@ -4,16 +4,18 @@ import model.Book;
 import model.Library;
 import model.User;
 
-import java.io.IOException;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Scanner;
 import java.util.stream.Collectors;
 
 public class LibraryUI {
     private final Library library;
     private final Scanner scanner = new Scanner(System.in);
 
-    public LibraryUI(Library library) {
-        this.library = library;
+    public LibraryUI() {
+        this.library = new Library();
+        this.library.initLibrary();
     }
 
     public void start() {
@@ -35,10 +37,10 @@ public class LibraryUI {
             String choice = scanner.nextLine();
             try {
                 switch (choice) {
-                    case "1" -> addBook();
+                    case "1" -> addLibraryBook();
                     case "2" -> searchBookAndPrint();
                     case "3" -> showAllBooks();
-                    case "4" -> addUser();
+                    case "4" -> addLibraryUser();
                     case "5" -> searchUserAndPrint();
                     case "6" -> showAllUsers();
                     case "7" -> borrowBook();
@@ -58,7 +60,7 @@ public class LibraryUI {
         }
     }
 
-    private void addBook() {
+    private void addLibraryBook() {
         System.out.println("*** Регистрация новой книги ***");
         System.out.print("Название: ");
         String title = scanner.nextLine();
@@ -88,12 +90,12 @@ public class LibraryUI {
         }
         Book book = new Book(title, author, year, totalCopies);
         int bookId = library.addBook(book);
-        System.out.println(library.books.get(bookId));
+        System.out.println(library.getBooks().get(bookId));
         System.out.println("Книга добавлена!");
         askReturn();
     }
 
-    private void addUser() {
+    private void addLibraryUser() {
         System.out.println("*** Регистрация нового читателя ***");
         System.out.print("Имя: ");
         String name = scanner.nextLine();
@@ -111,7 +113,7 @@ public class LibraryUI {
         System.out.print("Введите название, автора или год: ");
         String query = scanner.nextLine().toLowerCase();
 
-        var resBooks = library.books.values().stream()
+        var resBooks = library.getBooks().values().stream()
                 .filter(b -> b.getTitle().toLowerCase().contains(query)
                         || b.getAuthor().toLowerCase().contains(query)
                         || String.valueOf(b.getYear()).contains(query))
@@ -131,7 +133,7 @@ public class LibraryUI {
         System.out.print("Введите id, имя или email: ");
         String query = scanner.nextLine().toLowerCase();
 
-        var results = library.users.values().stream()
+        var results = library.getUsers().values().stream()
                 .filter(u -> String.valueOf(u.getId()).equals(query)
                         || u.getName().toLowerCase().contains(query)
                         || u.getEmail().toLowerCase().contains(query))
@@ -165,7 +167,7 @@ public class LibraryUI {
         if (foundUsers.size() > 1) {
             System.out.print("Введите id читателя: ");
             int id = Integer.parseInt(scanner.nextLine());
-            user = library.users.get(id);
+            user = library.getUser(id);
             if (user == null) {
                 System.out.println("Неверный id.");
                 return;
@@ -181,7 +183,7 @@ public class LibraryUI {
         if (foundBooks.size() > 1) {
             System.out.print("Введите id книги: ");
             int id = Integer.parseInt(scanner.nextLine());
-            book = library.books.get(id);
+            book = library.getBook(id);
             if (book == null) {
                 System.out.println("Неверный id.");
                 return;
@@ -204,7 +206,7 @@ public class LibraryUI {
         if (foundUsers.size() > 1) {
             System.out.print("Введите id читателя: ");
             int id = Integer.parseInt(scanner.nextLine());
-            user = library.users.get(id);
+            user = library.getUser(id);
             if (user == null) {
                 System.out.println("Неверный id.");
                 askReturn();
@@ -232,7 +234,7 @@ public class LibraryUI {
         if (userBooks.size() > 1) {
             System.out.print("Введите ID книги для возврата: ");
             int bookId = Integer.parseInt(scanner.nextLine());
-            bookToReturn = library.books.get(bookId);
+            bookToReturn = library.getBook(bookId);
             if (bookToReturn == null || !userBooks.containsKey(bookToReturn)) {
                 System.out.println("Неверный ID книги.");
                 askReturn();
@@ -256,7 +258,7 @@ public class LibraryUI {
         if (foundUsers.size() > 1) {
             System.out.print("Введите id читателя: ");
             int id = Integer.parseInt(scanner.nextLine());
-            user = library.users.get(id);
+            user = library.getUser(id);
             if (user == null) {
                 System.out.println("Неверный id.");
                 return;
@@ -279,21 +281,21 @@ public class LibraryUI {
         if (library.userBooks.isEmpty()) {
             System.out.println("Книг на руках у читателей сейчас нет.");
         } else {
-            System.out.print("\n*** Все книги на руках ***");
+            System.out.println("\n*** Все книги на руках ***");
 
             for (Map.Entry<Integer, Map<Integer, Integer>> userEntry : library.userBooks.entrySet()) {
                 Integer userId = userEntry.getKey();
                 Map<Integer, Integer> books = userEntry.getValue();
 
-                User user = library.users.get(userId);
+                User user = library.getUser(userId);
                 System.out.println("Читатель: " + user);
-                System.out.println("Книги на руках:");
+                System.out.println("  " + "Книги на руках:");
 
                 for (Map.Entry<Integer, Integer> bookEntry : books.entrySet()) {
                     Integer bookId = bookEntry.getKey();
                     Integer count = bookEntry.getValue();
 
-                    Book book = library.books.get(bookId);
+                    Book book = library.getBook(bookId);
                     if (book != null) {
                         System.out.println("  " + book + " — " + count + " шт.");
                     }
@@ -304,21 +306,21 @@ public class LibraryUI {
     }
 
     private void showAllUsers() {
-        if (library.users.isEmpty()) {
+        if (library.getUsers().isEmpty()) {
             System.out.println("Нет зарегистрированных читателей.");
         } else {
             System.out.println("\n*** Все зарегистрированные читатели ***");
-            library.users.values().forEach(System.out::println);
+            library.getUsers().values().forEach(System.out::println);
         }
         askReturn();
     }
 
     private void showAllBooks() {
-        if (library.books.isEmpty()) {
+        if (library.getBooks().isEmpty()) {
             System.out.println("Нет зарегистрированных книг.");
         } else {
             System.out.println("\n*** Все зарегистрированные книги ***");
-            library.books.values().forEach(System.out::println);
+            library.getBooks().values().forEach(System.out::println);
         }
         askReturn();
     }
