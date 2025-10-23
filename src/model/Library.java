@@ -4,6 +4,7 @@ import exceptions.BookFromUserNotFoundException;
 import exceptions.BookNotFoundException;
 import exceptions.BookValidationException;
 import exceptions.UserAlreadyExistsException;
+import exceptions.UserBookQuotaExceededException;
 import exceptions.UserNotFoundException;
 
 import java.io.BufferedReader;
@@ -12,37 +13,33 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class Library {
     private final Map<Integer, Book> books;
     private final Map<Integer, User> users;
+    private final Map<Integer, Loan> loans;
 
-    public Map<Integer, Map<Integer, Integer>> userBooks;
     private final String booksFile = "src/storage/books";
     private final String usersFile = "src/storage/users";
-    private final String borrowsFile = "src/storage/borrows";
+    private final String loansFile = "src/storage/loans";
+
+    private static final int MAX_BOOKS_PER_USER = 3;
 
     public Library() {
         this.books = new HashMap<Integer, Book>();
         this.users = new HashMap<Integer, User>();
-        this.userBooks = new HashMap<>();
+        this.loans = new HashMap<Integer, Loan>();
     }
 
     public void initLibrary() {
         try {
             this.loadBooks();
-        } catch (IOException e) {
-            throw new IllegalArgumentException(e);
-        }
-        try {
             this.loadUsers();
-        } catch (IOException e) {
-            throw new IllegalArgumentException(e);
-        }
-        try {
-            this.loadBorrows();
+            this.loadLoans();
         } catch (IOException e) {
             throw new IllegalArgumentException(e);
         }
@@ -56,6 +53,14 @@ public class Library {
         return this.books.get(id);
     }
 
+    public Map<Integer, Loan> getLoans() {
+        return this.loans;
+    }
+
+    public Loan getLoan(int id) {
+        return this.loans.get(id);
+    }
+
     public Map<Integer, User> getUsers() {
         return this.users;
     }
@@ -65,7 +70,7 @@ public class Library {
     }
 
     public int addBook(Book book) {
-        for (Book existBook : books.values()) {
+        for (Book existBook : this.books.values()) {
             if (existBook.equals(book)) {
                 if (book.getTotalCopies() <= 0) {
                     throw new BookValidationException("Количество добавляемых книг не может быть меньше или равно нулю.");
@@ -80,7 +85,7 @@ public class Library {
             }
         }
 
-        books.put(book.getId(), book);
+        this.books.put(book.getId(), book);
         try {
             saveBooks();
             return book.getId();
@@ -112,7 +117,7 @@ public class Library {
         }
     }
 
-    // Сохранение списка пользователй в файл
+    // Сохранение списка пользователей в файл
     public void saveUsers() throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(this.usersFile))) {
             for (User user : this.users.values()) {
@@ -145,6 +150,7 @@ public class Library {
             String line;
             while ((line = reader.readLine()) != null) {
                 User user = User.fromFileString(line);
+                user.setLibrary(this);
                 this.users.put(user.getId(), user);
             }
         }
@@ -152,8 +158,16 @@ public class Library {
 
     // Выдача книги
     public void borrowBook(int userId, int bookId) {
-        User user = users.get(userId);
-        Book book = books.get(bookId);
+        long activeLoanCount = loans.values().stream()
+                .filter(l -> l.getUserId() == userId && l.isActive())
+                .count();
+
+        if (activeLoanCount >= MAX_BOOKS_PER_USER) {
+            throw new UserBookQuotaExceededException();
+        }
+
+        User user = this.users.get(userId);
+        Book book = this.books.get(bookId);
 
         if (user == null) {
             throw new UserNotFoundException("Читатель с id=" + userId + " не найден.");
@@ -162,14 +176,24 @@ public class Library {
             throw new BookNotFoundException("Книга с id=" + bookId + " не найдена.");
         }
 
-        book.giveBook();
+        //Уже у читателя
+        boolean isActiveLoan = loans.values().stream()
+                .anyMatch(l -> l.getBookId() == bookId &&
+                        l.getUserId() == userId &&
+                        l.isActive());
+        if (isActiveLoan) {
+            throw new IllegalStateException("Книга уже на руках у читателя.");
+        }
 
-        this.userBooks.computeIfAbsent(userId, k -> new HashMap<>());
-        Map<Integer, Integer> booksOfUser = this.userBooks.get(userId);
-        booksOfUser.put(bookId, booksOfUser.getOrDefault(bookId, 0) + 1);
+        Loan loan = new Loan(bookId, userId, LocalDate.now(), this);
+        this.loans.put(loan.getId(), loan);
+
+        book.giveBook();
         try {
-            this.saveBorrows();
+            this.saveLoans();
             this.saveBooks();
+            System.out.println("Книга выдана:");
+            System.out.println(loan);
         } catch (IOException e) {
             throw new IllegalArgumentException(e);
         }
@@ -177,78 +201,70 @@ public class Library {
 
     // Возврат книги
     public void returnBook(int userId, int bookId) {
-        Map<Integer, Integer> booksOfUser = this.userBooks.get(userId);
-        if (booksOfUser == null || !booksOfUser.containsKey(bookId)) {
-            throw new BookFromUserNotFoundException("У читателя нет книги с id=" + bookId);
+        Loan loan = null;
+        for (Loan l : this.loans.values()) {
+            if (l.getUserId() == userId && l.getBookId() == bookId && l.isActive()) {
+                loan = l;
+                break;
+            }
+        }
+        if (loan == null) {
+            throw new BookFromUserNotFoundException("У читателя нет на руках книги с id=" + bookId);
         }
 
-        int count = booksOfUser.get(bookId);
-        if (count <= 1) {
-            booksOfUser.remove(bookId);
-        } else {
-            booksOfUser.put(bookId, count - 1);
-        }
-
-        Book book = this.books.get(bookId);
+        loan.setReturnDate(LocalDate.now());
+        Book book = books.get(bookId);
         book.returnBook();
 
-        if (booksOfUser.isEmpty()) {
-            this.userBooks.remove(userId);
-        }
         try {
-            this.saveBorrows();
+            this.saveLoans();
             this.saveBooks();
         } catch (IOException e) {
             throw new IllegalArgumentException(e);
         }
     }
 
-    // Получить книги выданные читателю
-    public Map<Book, Integer> getUserBooks(int userId) {
-        Map<Integer, Integer> booksOfUser = this.userBooks.get(userId);
-        if (booksOfUser == null) return Map.of();
-
-        Map<Book, Integer> result = new HashMap<>();
-        for (var entry : booksOfUser.entrySet()) {
-            result.put(this.books.get(entry.getKey()), entry.getValue());
-        }
-        return result;
-    }
-
     // Сохранить выдачи в файл
-    public void saveBorrows() throws IOException {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(this.borrowsFile))) {
-            for (var userEntry : this.userBooks.entrySet()) {
-                int userId = userEntry.getKey();
-                for (var bookEntry : userEntry.getValue().entrySet()) {
-                    int bookId = bookEntry.getKey();
-                    int count = bookEntry.getValue();
-                    writer.write(String.format("%d;%d;%d", userId, bookId, count));
-                    writer.newLine();
-                }
+    public void saveLoans() throws IOException {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(this.loansFile))) {
+            for (Loan loan : this.loans.values()) {
+                writer.write(loan.toFileString());
+                writer.newLine();
             }
         }
     }
 
-    // Загрузить список книг на руках у читателей из фала
-    public void loadBorrows() throws IOException {
-        this.userBooks.clear();
-        File file = new File(this.borrowsFile);
-        if (!file.exists()) return;
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+    // Загрузить список книг на руках у читателей из файла
+    public void loadLoans() throws IOException {
+        this.loans.clear();
+        File f = new File(this.loansFile);
+        if (!f.exists()) return;
+        try (BufferedReader reader = new BufferedReader(new FileReader(f))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                String[] parts = line.split(";");
-                if (parts.length != 3) continue;
-
-                int userId = Integer.parseInt(parts[0]);
-                int bookId = Integer.parseInt(parts[1]);
-                int count = Integer.parseInt(parts[2]);
-
-                this.userBooks.computeIfAbsent(userId, k -> new HashMap<>());
-                this.userBooks.get(userId).put(bookId, count);
+                Loan loan = Loan.fromFileString(line);
+                loan.setLibrary(this);
+                this.loans.put(loan.getId(), loan);
             }
         }
+    }
+
+    //Поиск просроченных выдач (надо вернуть в течение 30 дней после получения)
+    public List<Loan> getExpiredLoans() {
+        return loans.values().stream()
+                .filter(Loan::isExpired)
+                .toList();
+    }
+
+    // Просмотр истории выдач: По конкретному пользователю
+    public List<Loan> getUserLoanHistory(int userId) {
+        return this.getUser(userId).getUserLoans();
+    }
+
+    //Просмотр истории выдач: По конкретной книге
+    public List<Loan> getBookLoanHistory(int bookId) {
+        return loans.values().stream()
+                .filter(l -> l.getBookId() == bookId)
+                .toList();
     }
 }
