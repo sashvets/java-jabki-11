@@ -1,5 +1,6 @@
 package model;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -7,19 +8,20 @@ public class User {
     private final int id;
     private final String name;
     private final String email;
+    private Library library;
+
     private static final AtomicInteger counter = new AtomicInteger(0);
 
     public User(int id, String name, String email) {
         this.id = id;
-        if (this.id > counter.get()) {
-            counter.set(this.id);
-        }
+        counter.accumulateAndGet(this.id, Math::max);
         this.name = name;
         this.email = email;
     }
 
-    public User(String name, String email) {
+    public User(String name, String email, Library library) {
         this(nextId(), name, email);
+        this.library = library;
     }
 
     public int getId() {
@@ -36,6 +38,23 @@ public class User {
 
     static int nextId() {
         return counter.incrementAndGet();
+    }
+
+    public void setLibrary(Library library) {
+        this.library = library;
+    }
+
+    public List<Loan> getUserLoans() {
+        return this.library.getLoans().values().stream()
+                .filter(loan -> loan.getUserId() == this.id)
+                .toList();
+    }
+
+    public List<Loan> getCurrentLoans() {
+        return this.getUserLoans().stream()
+                .filter(Loan::isActive)
+                .sorted((a, b) -> b.getLoanDate().compareTo(a.getLoanDate()))
+                .toList();
     }
 
     @Override
@@ -69,7 +88,7 @@ public class User {
     public static User fromFileString(String line) {
         String[] parts = line.split(";");
         if (parts.length != 3) {
-            throw new IllegalArgumentException("Неверная строка: " + line);
+            throw new IllegalArgumentException("Некорректная запись читателя: " + line);
         }
 
         int id = Integer.parseInt(parts[0]);

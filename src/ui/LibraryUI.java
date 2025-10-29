@@ -2,11 +2,12 @@ package ui;
 
 import model.Book;
 import model.Library;
+import model.Loan;
 import model.User;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class LibraryUI {
@@ -31,6 +32,9 @@ public class LibraryUI {
                     " 8. Вернуть книгу\n" +
                     " 9. Книги у читателя\n" +
                     "10. Все выданные книги\n" +
+                    "11. Просроченные выдачи\n" +
+                    "12. История выдач по пользователю\n" +
+                    "13. История выдач по книге\n" +
                     " 0. Выход\n" +
                     "Выберите пункт: "
             );
@@ -47,6 +51,9 @@ public class LibraryUI {
                     case "8" -> returnBook();
                     case "9" -> showUserBooks();
                     case "10" -> showBorrowsBooks();
+                    case "11" -> showExpiredLoans();
+                    case "12" -> showUserLoanHistory();
+                    case "13" -> showBookLoanHistory();
                     case "0" -> {
                         System.out.println("Выход...");
                         return;
@@ -101,7 +108,7 @@ public class LibraryUI {
         String name = scanner.nextLine();
         System.out.print("Email: ");
         String email = scanner.nextLine();
-        User newUser = new User(name, email);
+        User newUser = new User(name, email, library);
         library.addUser(newUser);
         System.out.println(newUser);
         System.out.println("Читатель добавлен!");
@@ -113,7 +120,7 @@ public class LibraryUI {
         System.out.print("Введите название, автора или год: ");
         String query = scanner.nextLine().toLowerCase();
 
-        var resBooks = library.getBooks().values().stream()
+        List<Book> resBooks = library.getBooks().values().stream()
                 .filter(b -> b.getTitle().toLowerCase().contains(query)
                         || b.getAuthor().toLowerCase().contains(query)
                         || String.valueOf(b.getYear()).contains(query))
@@ -133,7 +140,7 @@ public class LibraryUI {
         System.out.print("Введите id, имя или email: ");
         String query = scanner.nextLine().toLowerCase();
 
-        var results = library.getUsers().values().stream()
+        List<User> results = library.getUsers().values().stream()
                 .filter(u -> String.valueOf(u.getId()).equals(query)
                         || u.getName().toLowerCase().contains(query)
                         || u.getEmail().toLowerCase().contains(query))
@@ -161,145 +168,130 @@ public class LibraryUI {
     private void borrowBook() {
         System.out.println("*** Выдача книги читателю ***");
         List<User> foundUsers = searchUser();
-        if (foundUsers.isEmpty()) return;
+        if (foundUsers.isEmpty()) {
+            askReturn();
+            return;
+        }
 
+        System.out.print("Введите id читателя: ");
+        int userId = Integer.parseInt(scanner.nextLine());
         User user;
-        if (foundUsers.size() > 1) {
-            System.out.print("Введите id читателя: ");
-            int id = Integer.parseInt(scanner.nextLine());
-            user = library.getUser(id);
-            if (user == null) {
-                System.out.println("Неверный id.");
-                return;
-            }
-        } else {
-            user = foundUsers.get(0);
+        user = library.getUser(userId);
+        if (user == null) {
+            System.out.println("Неверный id.");
+            askReturn();
+            return;
         }
 
         List<Book> foundBooks = searchBook();
-        if (foundBooks.isEmpty()) return;
-
+        if (foundBooks.isEmpty()) {
+            askReturn();
+            return;
+        }
+        System.out.print("Введите id книги: ");
+        int bookId = Integer.parseInt(scanner.nextLine());
         Book book;
-        if (foundBooks.size() > 1) {
-            System.out.print("Введите id книги: ");
-            int id = Integer.parseInt(scanner.nextLine());
-            book = library.getBook(id);
-            if (book == null) {
-                System.out.println("Неверный id.");
-                return;
-            }
-        } else {
-            book = foundBooks.get(0);
+        book = library.getBook(bookId);
+        if (book == null) {
+            System.out.println("Неверный id.");
+            askReturn();
+            return;
         }
 
         library.borrowBook(user.getId(), book.getId());
-        System.out.println("Книга выдана.");
         askReturn();
     }
 
     private void returnBook() {
         System.out.println("*** Возврат книги ***");
         List<User> foundUsers = searchUser();
-        if (foundUsers.isEmpty()) return;
-
+        if (foundUsers.isEmpty()) {
+            askReturn();
+            return;
+        }
+        System.out.print("Введите id читателя: ");
+        int id = Integer.parseInt(scanner.nextLine());
         User user;
-        if (foundUsers.size() > 1) {
-            System.out.print("Введите id читателя: ");
-            int id = Integer.parseInt(scanner.nextLine());
-            user = library.getUser(id);
-            if (user == null) {
-                System.out.println("Неверный id.");
-                askReturn();
-                return;
-            }
-        } else {
-            user = foundUsers.get(0);
+        user = library.getUser(id);
+        if (user == null) {
+            System.out.println("Неверный id.");
+            askReturn();
+            return;
         }
 
-        Map<Book, Integer> userBooks = library.getUserBooks(user.getId());
-        if (userBooks.isEmpty()) {
-            System.out.println("У этого читателя нет книг.");
+        List<Loan> userLoans = user.getCurrentLoans();
+        if (userLoans.isEmpty()) {
+            System.out.println("У читателя нет книг на руках.");
             askReturn();
             return;
         }
 
         System.out.println("\nКниги на руках у читателя:");
-        for (Map.Entry<Book, Integer> entry : userBooks.entrySet()) {
-            Book book = entry.getKey();
-            Integer count = entry.getValue();
-            System.out.println(book + " — " + count + " шт.");
-        }
-
-        Book bookToReturn;
-        if (userBooks.size() > 1) {
+        userLoans.forEach(loan -> System.out.println(loan + "\n---------------------------------------------"));
+        if (!userLoans.isEmpty()) {
             System.out.print("Введите ID книги для возврата: ");
             int bookId = Integer.parseInt(scanner.nextLine());
-            bookToReturn = library.getBook(bookId);
-            if (bookToReturn == null || !userBooks.containsKey(bookToReturn)) {
+            Loan loan = userLoans.stream()
+                    .filter(l -> l.getBookId() == bookId)
+                    .findFirst()
+                    .orElse(null);
+            if (loan == null) {
                 System.out.println("Неверный ID книги.");
                 askReturn();
                 return;
             }
-        } else {
-            bookToReturn = userBooks.keySet().iterator().next();
+            library.returnBook(user.getId(), bookId);
+            System.out.println("Книга возвращена.");
+            System.out.println(library.getLoan(loan.getId()));
         }
-
-        library.returnBook(user.getId(), bookToReturn.getId());
-        System.out.println("Книга возвращена.");
         askReturn();
     }
 
     private void showUserBooks() {
         System.out.println("*** Просмотр книг выданных читателю ***");
         List<User> foundUsers = searchUser();
-        if (foundUsers.isEmpty()) return;
-
+        if (foundUsers.isEmpty()) {
+            askReturn();
+            return;
+        }
+        System.out.print("Введите id читателя: ");
+        int id = Integer.parseInt(scanner.nextLine());
         User user;
-        if (foundUsers.size() > 1) {
-            System.out.print("Введите id читателя: ");
-            int id = Integer.parseInt(scanner.nextLine());
-            user = library.getUser(id);
-            if (user == null) {
-                System.out.println("Неверный id.");
-                return;
-            }
+        user = library.getUser(id);
+        if (user == null) {
+            System.out.println("Неверный id.");
+            askReturn();
+            return;
         } else {
-            user = foundUsers.get(0);
+            List<Loan> userLoans = user.getCurrentLoans();
+
+            if (userLoans.isEmpty()) {
+                System.out.println("У читателя нет книг на руках.");
+                askReturn();
+                return;
+            } else {
+                System.out.println("*** Все выдачи читателя ***");
+                userLoans.forEach(loan -> System.out.println(loan + "\n---------------------------------------------"));
+            }
         }
 
-        var books = library.getUserBooks(user.getId());
-        if (books.isEmpty()) {
-            System.out.println("У читателя нет книг на руках.");
-        } else {
-            books.forEach((book, count) ->
-                    System.out.println(book + " — " + count + " шт."));
-        }
         askReturn();
     }
 
     private void showBorrowsBooks() {
-        if (library.userBooks.isEmpty()) {
+        Set<Integer> activeUsers = library.getLoans().values().stream()
+                .filter(loan -> !loan.isExpired())
+                .map(Loan::getUserId)
+                .collect(Collectors.toSet());
+
+        if (activeUsers.isEmpty()) {
             System.out.println("Книг на руках у читателей сейчас нет.");
         } else {
             System.out.println("\n*** Все книги на руках ***");
 
-            for (Map.Entry<Integer, Map<Integer, Integer>> userEntry : library.userBooks.entrySet()) {
-                Integer userId = userEntry.getKey();
-                Map<Integer, Integer> books = userEntry.getValue();
-
-                User user = library.getUser(userId);
-                System.out.println("Читатель: " + user);
-                System.out.println("  " + "Книги на руках:");
-
-                for (Map.Entry<Integer, Integer> bookEntry : books.entrySet()) {
-                    Integer bookId = bookEntry.getKey();
-                    Integer count = bookEntry.getValue();
-
-                    Book book = library.getBook(bookId);
-                    if (book != null) {
-                        System.out.println("  " + book + " — " + count + " шт.");
-                    }
-                }
+            for (int userId : activeUsers) {
+                List<Loan> userLoans = library.getUser(userId).getCurrentLoans();
+                userLoans.forEach(loan -> System.out.println(loan + "\n---------------------------------------------"));
             }
         }
         askReturn();
@@ -322,6 +314,87 @@ public class LibraryUI {
             System.out.println("\n*** Все зарегистрированные книги ***");
             library.getBooks().values().forEach(System.out::println);
         }
+        askReturn();
+    }
+
+    private void showExpiredLoans() {
+        List<Loan> expiredLoans = library.getExpiredLoans();
+
+        if (expiredLoans.isEmpty()) {
+            System.out.println("Просроченных книг не найдено.");
+            askReturn();
+            return;
+        }
+
+        System.out.println("\n*** Просроченные выдачи книг ***");
+        expiredLoans.forEach(loan -> {
+            System.out.println(loan);
+            System.out.println("---------------------------------------------");
+        });
+        askReturn();
+    }
+
+    private void showUserLoanHistory() {
+        System.out.println("*** Просмотр истории читателя ***");
+        List<User> foundUsers = searchUser();
+        if (foundUsers.isEmpty()) {
+            askReturn();
+            return;
+        }
+
+        System.out.print("Введите id читателя: ");
+        int userId = Integer.parseInt(scanner.nextLine());
+        User user;
+        user = library.getUser(userId);
+        if (user == null) {
+            System.out.println("Неверный id.");
+            askReturn();
+            return;
+        }
+
+        List<Loan> loans = library.getUserLoanHistory(userId);
+        if (loans.isEmpty()) {
+            System.out.println("У пользователя нет истории получения книг.");
+            askReturn();
+            return;
+        }
+
+        System.out.println("\n*** История выдач пользователя ***");
+        loans.forEach(loan -> {
+            System.out.println(loan);
+            System.out.println("---------------------------------------------");
+        });
+        askReturn();
+    }
+
+    private void showBookLoanHistory() {
+        List<Book> foundBooks = searchBook();
+        if (foundBooks.isEmpty()) {
+            return;
+        }
+
+        System.out.print("Введите id книги: ");
+        int bookId = Integer.parseInt(scanner.nextLine());
+        Book book;
+        book = library.getBook(bookId);
+        if (book == null) {
+            System.out.println("Неверный id.");
+            askReturn();
+            return;
+        }
+
+        List<Loan> loans = library.getBookLoanHistory(bookId);
+        if (loans.isEmpty()) {
+            System.out.println("Книга никогда не выдавалась.");
+            askReturn();
+            return;
+        }
+
+        System.out.println("\n*** История выдач книги ***");
+        loans.forEach(loan -> {
+            System.out.println(loan);
+            System.out.println("---------------------------------------------");
+        });
         askReturn();
     }
 

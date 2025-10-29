@@ -39,9 +39,7 @@ public class Book {
             throw new BookValidationException("Количество доступных экземпляров книги не может превышать имеющиеся.");
         }
         this.id = id;
-        if (this.id > counter.get()) {
-            counter.set(this.id);
-        }
+        counter.accumulateAndGet(this.id, Math::max);
         this.title = title;
         this.author = author;
         this.year = year;
@@ -152,7 +150,7 @@ public class Book {
     public static Book fromFileString(String line) {
         String[] parts = line.split(";");
         if (parts.length != 6) {
-            throw new IllegalArgumentException("Неверная строка: " + line);
+            throw new IllegalArgumentException("Некорректная запись книги: " + line);
         }
 
         int id = Integer.parseInt(parts[0]);
